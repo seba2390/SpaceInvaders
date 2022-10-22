@@ -32,17 +32,29 @@ class SpaceInvadersApp:
         self._monster_surf = None
         self._monster_react = None
         self._monster_reacts = []
+        self.monster_surfs = None
         self.monster_size = self.monster_width, self.monster_height = 45, 45
         self.monster_edge_distance = 350
         self.monster_right_edge_reached, self.monster_left_edge_reached = False, False
         self.monster_x_vel = 1
+
         self.monster_shot_size = self.monster_shot_width, self.monster_shot_height = 25, 25
         self.monster_shot_surf = None
         self.monster_shot_react = None
         self.monster_shot_reacts = []
-        self.monster_surfs = None
+
+        self.monster_explosion_size = self.monster_explosion_width, self.monster_explosion_height = 45, 45
+        self.monster_explosion_surf = None
+        self.monster_explosion_react = None
+        self.monster_explosion_reacts = []
+        self.monster_explosion_surfs = None
+        # For handling the update procedure of the monster explosion sprites
+        self.monster_explosion_anim_duration = 25  # Each sprite lasts 30 frames in main loop
+        self.monster_explosion_anim_index = 0
+        self.monster_explosion_anim_counter = 0
+        self.monster_explosion_remove_counters = []
         # For handling the update procedure of the monster sprites
-        self.monster_anim_duration = 30  # Each sprite lasts 10 frames in main loop
+        self.monster_anim_duration = 30  # Each sprite lasts 30 frames in main loop
         self.monster_anim_index = 0
         self.monster_anim_counter = 0
 
@@ -65,7 +77,7 @@ class SpaceInvadersApp:
         self._life_react = None
         self._life_reacts = []  # For 3 lives
         self._life_surf = None
-        # For handling the update procedure of the spaceship sprites
+        # For handling the update procedure of the life sprites
         self.life_anim_duration = 10  # Each sprite lasts 10 frames in main loop
         self.life_anim_index = 0
         self.life_anim_counter = 0
@@ -115,6 +127,16 @@ class SpaceInvadersApp:
                               pygame.image.load("media/enemy/frame_1.png").convert_alpha()]
         self._monster_surf = self.monster_surfs[0]
         self._monster_react = self._monster_surf.get_rect()
+
+        # Loading in graphics for monster explosion
+        self.monster_explosion_surfs = [pygame.image.load("media/monster_explosion/frame_0.png").convert_alpha(),
+                                        pygame.image.load("media/monster_explosion/frame_1.png").convert_alpha(),
+                                        pygame.image.load("media/monster_explosion/frame_2.png").convert_alpha(),
+                                        pygame.image.load("media/monster_explosion/frame_3.png").convert_alpha(),
+                                        pygame.image.load("media/monster_explosion/frame_4.png").convert_alpha(),
+                                        pygame.image.load("media/monster_explosion/frame_5.png").convert_alpha()]
+        self.monster_explosion_surf = self.monster_explosion_surfs[0]
+        self.monster_explosion_react = self.monster_explosion_surf.get_rect()
 
         # Loading in graphics for shots fired by monsters
         self.monster_shot_surf = pygame.image.load("media/shots/shot2.png")
@@ -178,6 +200,14 @@ class SpaceInvadersApp:
         shot_react.centery = self._monster_reacts[monster_index].centery + self.monster_height / 2 + self.shot_buffer
         self.monster_shot_reacts.append(shot_react)
 
+    def spawn_monster_explosion(self, monster_index):
+        """ For spawning an explosion at monster when hit."""
+        explosion_react = deepcopy(self.monster_explosion_react)
+        explosion_react.centerx = self._monster_reacts[monster_index].centerx
+        explosion_react.centery = self._monster_reacts[monster_index].centery
+        self.monster_explosion_reacts.append(explosion_react)
+        self.monster_explosion_remove_counters.append(self.monster_explosion_anim_duration)
+
     def move_monsters_right(self):
         """ For moving monsters right """
         if self.monster_right_edge_reached is False:
@@ -222,6 +252,10 @@ class SpaceInvadersApp:
         # Updating score
         for kill in range(len(remove_monster_indices)):
             self.current_score += 10
+
+        # Spawning explosion at monster
+        for kill in range(len(remove_monster_indices)):
+            self.spawn_monster_explosion(remove_monster_indices[kill])
 
         updated_monster_rects = []
         for index in range(len(self._monster_reacts)):
@@ -336,6 +370,37 @@ class SpaceInvadersApp:
                 self._monster_reacts[monster].centery = current_y
             self.monster_anim_index += 1
 
+    def update_monster_explosion_reacts(self):
+        """ For updating monster explosion animation. """
+        if self.monster_explosion_anim_counter == self.monster_explosion_anim_duration:
+            self.monster_explosion_anim_counter = 0
+            if self.monster_explosion_anim_index == len(self.monster_explosion_surfs):
+                self.monster_explosion_anim_index = 0
+                # Remove last explosion
+            for explosion in range(len(self.monster_explosion_reacts)):
+                current_x, current_y = self.monster_explosion_reacts[explosion].centerx, self.monster_explosion_reacts[explosion].centery
+                self.monster_explosion_surf = self.monster_explosion_surfs[self.monster_explosion_anim_index]
+                self.monster_explosion_reacts[explosion] = self.monster_explosion_surf.get_rect()
+                self.monster_explosion_reacts[explosion].centerx = current_x
+                self.monster_explosion_reacts[explosion].centery = current_y
+            self.monster_explosion_anim_index += 1
+
+    def monster_explosion_handling(self):
+        remove_explosion_indices = []
+        for remove_count in range(len(self.monster_explosion_remove_counters)):
+            self.monster_explosion_remove_counters[remove_count] -= 1
+            if self.monster_explosion_remove_counters[remove_count] == 0:
+                remove_explosion_indices.append(remove_count)
+        updated_explosion_reacts = []
+        updated_remove_counters = []
+        for index in range(len(self.monster_explosion_remove_counters)):
+            if index not in remove_explosion_indices:
+                updated_explosion_reacts.append(self.monster_explosion_reacts[index])
+                updated_remove_counters.append(self.monster_explosion_remove_counters[index])
+
+        self.monster_explosion_reacts = updated_explosion_reacts
+        self.monster_explosion_remove_counters = updated_remove_counters
+
     def on_loop(self):
         pass
 
@@ -350,6 +415,9 @@ class SpaceInvadersApp:
         # Rendering monsters
         for monster_react in self._monster_reacts:
             self._display_surf.blit(self._monster_surf, monster_react)
+        # Rendering monster explosion reacts
+        for monster_explosion_react in self.monster_explosion_reacts:
+            self._display_surf.blit(self.monster_explosion_surf, monster_explosion_react)
         # Rendering shots fired by monsters
         for monster_shot_react in self.monster_shot_reacts:
             self._display_surf.blit(self.monster_shot_surf, monster_shot_react)
@@ -401,10 +469,14 @@ class SpaceInvadersApp:
             self.update_monster_shots_position()
             self.update_monster_shot_reacts()
 
-            self.shot_2_monster_collision_detect()
             self.shot_2_ship_collision_detect()
+            self.shot_2_monster_collision_detect()
 
             self.update_monster_reacts()
+
+            self.update_monster_explosion_reacts()
+            self.monster_explosion_handling()
+
             self.update_life_reacts()
             self.update_score()
 
@@ -414,6 +486,7 @@ class SpaceInvadersApp:
             self.ship_anim_counter += 1
             self.life_anim_counter += 1
             self.monster_anim_counter += 1
+            self.monster_explosion_anim_counter += 1
         self.on_cleanup()
 
 
