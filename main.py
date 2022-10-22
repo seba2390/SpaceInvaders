@@ -4,6 +4,11 @@ import numpy as np
 from copy import deepcopy
 
 
+# TODO: Make explosion anim start at same frame every time
+# TODO: Add more levels
+# TODO: Add game menu
+# TODO: Add different enemies
+
 class SpaceInvadersApp:
     def __init__(self):
         self._running = True
@@ -57,6 +62,18 @@ class SpaceInvadersApp:
         self.monster_anim_duration = 30  # Each sprite lasts 30 frames in main loop
         self.monster_anim_index = 0
         self.monster_anim_counter = 0
+
+        self.ufo_size = self.ufo_width, self.ufo_height = 55, 55
+        self.ufo_surf = None
+        self.ufo_react = None
+        self.ufo_reacts = []
+        self.ufo_surfs = None
+        self.ufo_direction_flag = None
+        self.ufo_x_vel = 2
+        # For handling the update procedure of the monster explosion sprites
+        self.ufo_anim_duration = 25  # Each sprite lasts 30 frames in main loop
+        self.ufo_anim_index = 0
+        self.ufo_anim_counter = 0
 
         self.buffer = 20
         self.shot_buffer = 5
@@ -122,6 +139,15 @@ class SpaceInvadersApp:
         self._life_surf = self.life_surfs[0]
         self._life_react = self._life_surf.get_rect()
 
+        # Loading in graphics for ufo
+        self.ufo_surfs = [pygame.image.load("media/ufo/frame_0.png").convert_alpha(),
+                          pygame.image.load("media/ufo/frame_1.png").convert_alpha(),
+                          pygame.image.load("media/ufo/frame_2.png").convert_alpha(),
+                          pygame.image.load("media/ufo/frame_3.png").convert_alpha(),
+                          pygame.image.load("media/ufo/frame_5.png").convert_alpha()]
+        self.ufo_surf = self.ufo_surfs[0]
+        self.ufo_react = self.ufo_surf.get_rect()
+
         # Loading in graphics for monsters
         self.monster_surfs = [pygame.image.load("media/enemy/frame_0.png").convert_alpha(),
                               pygame.image.load("media/enemy/frame_1.png").convert_alpha()]
@@ -183,8 +209,23 @@ class SpaceInvadersApp:
                 x_distance = col * (self.monster_width + self.monster_buffer)
                 y_distance = row * (self.monster_height + self.monster_buffer)
                 current_rect.centerx = self.monster_width / 2 + self.monster_edge_distance + x_distance
-                current_rect.centery = self.monster_height / 2 + 40 + y_distance
+                current_rect.centery = self.monster_height / 2 + 100 + y_distance
                 self._monster_reacts.append(current_rect)
+
+    def spawn_ufo(self):
+        """ For spawning in monsters in beginning of game """
+        direction_flag = np.random.binomial(n=1, p=0.5, size=1)
+        if direction_flag == 1:
+            self.ufo_direction_flag = "right"
+        elif direction_flag == 0:
+            self.ufo_direction_flag = "left"
+        current_rect = deepcopy(self.ufo_react)
+        if self.ufo_direction_flag == "right":
+            current_rect.centerx = self.ufo_width
+        elif self.ufo_direction_flag == "left":
+            current_rect.centerx = self.screen_width - self.ufo_width
+        current_rect.centery = self.ufo_height+10
+        self.ufo_reacts.append(current_rect)
 
     def spawn_lives(self):
         """ For spawning in lives in beginning of game """
@@ -206,7 +247,7 @@ class SpaceInvadersApp:
         explosion_react.centerx = self._monster_reacts[monster_index].centerx
         explosion_react.centery = self._monster_reacts[monster_index].centery
         self.monster_explosion_reacts.append(explosion_react)
-        self.monster_explosion_remove_counters.append(self.monster_explosion_anim_duration)
+        self.monster_explosion_remove_counters.append(0)
 
     def move_monsters_right(self):
         """ For moving monsters right """
@@ -269,6 +310,34 @@ class SpaceInvadersApp:
         self._monster_reacts = updated_monster_rects
         self._ship_shot_reacts = updated_ship_shot_rects
 
+    def shot_2_ufo_collision_detect(self):
+        """ For detecting collisions between shots fired from ships, and monsters
+            which also updates list of monster rects and list of shot rects,
+            when collision detected. (N.B. Also updates current score.)"""
+        remove_shot_indices = []
+        remove_ufo_indices = []
+        for ufo in range(len(self.ufo_reacts)):
+            for ship_shot in range(len(self._ship_shot_reacts)):
+                if pygame.Rect.colliderect(self.ufo_reacts[ufo], self._ship_shot_reacts[ship_shot]):
+                    remove_shot_indices.append(ship_shot)
+                    remove_ufo_indices.append(ufo)
+
+        # Updating score
+        for kill in range(len(remove_ufo_indices)):
+            self.current_score += 50
+
+        updated_ufo_rects = []
+        for index in range(len(self.ufo_reacts)):
+            if index not in remove_ufo_indices:
+                updated_ufo_rects.append(self.ufo_reacts[index])
+        updated_ship_shot_rects = []
+        for index in range(len(self._ship_shot_reacts)):
+            if index not in remove_shot_indices:
+                updated_ship_shot_rects.append(self._ship_shot_reacts[index])
+
+        self.ufo_reacts = updated_ufo_rects
+        self._ship_shot_reacts = updated_ship_shot_rects
+
     def shot_2_ship_collision_detect(self):
         """ For detecting collisions between shots fired from enemies, and ship
             which also updates list of shot rects and list of life rects
@@ -298,6 +367,22 @@ class SpaceInvadersApp:
                 if shooting_flag == 1:
                     self.spawn_monster_shot(monster_index=monster)
 
+    def generate_ufo(self):
+        """ For generating ufo's randomly. (only 1 at a time on the screen) """
+        if len(self.ufo_reacts) == 0:
+            spawn_probability = 0.001  # Number in [0;1]
+            spawn_flag = np.random.binomial(n=1, p=spawn_probability, size=1)[0]  # Returns 1 w. prob. 'p'
+            if spawn_flag == 1:
+                self.spawn_ufo()
+
+    def update_ufo_position(self):
+        if len(self.ufo_reacts) > 0:
+            for i in range(len(self.ufo_reacts)):
+                if self.ufo_direction_flag == 'right':
+                    self.ufo_reacts[i] = self.ufo_reacts[i].move(self.ufo_x_vel, 0)
+                elif self.ufo_direction_flag == 'left':
+                    self.ufo_reacts[i] = self.ufo_reacts[i].move(-self.ufo_x_vel, 0)
+
     def update_ship_shots_position(self):
         """ For updating positions of shots fired from ship."""
         if len(self._ship_shot_reacts) > 0:
@@ -320,6 +405,11 @@ class SpaceInvadersApp:
         if len(self.monster_shot_reacts) > 0:
             self.monster_shot_reacts = [r for r in self.monster_shot_reacts if
                                         r.centery <= self.screen_height - self.ship_shot_height / 2]
+
+    def update_ufo_reacts(self):
+        """ Removing ufo that are out of screen"""
+        if len(self.ufo_reacts) > 0:
+            self.ufo_reacts = [r for r in self.ufo_reacts if self.ufo_width < r.centerx < (self.screen_width - self.ufo_width)]
 
     def update_score(self):
         """ For updating score value text. """
@@ -370,6 +460,20 @@ class SpaceInvadersApp:
                 self._monster_reacts[monster].centery = current_y
             self.monster_anim_index += 1
 
+    def update_ufo_anim_reacts(self):
+        """ For updating monster animation. """
+        if self.ufo_anim_counter == self.ufo_anim_duration:
+            self.ufo_anim_counter = 0
+            if self.ufo_anim_index == len(self.ufo_surfs):
+                self.ufo_anim_index = 0
+            for ufo in range(len(self.ufo_reacts)):
+                current_x, current_y = self.ufo_reacts[ufo].centerx, self.ufo_reacts[ufo].centery
+                self.ufo_surf = self.ufo_surfs[self.ufo_anim_index]
+                self.ufo_reacts[ufo] = self._monster_surf.get_rect()
+                self.ufo_reacts[ufo].centerx = current_x
+                self.ufo_reacts[ufo].centery = current_y
+            self.ufo_anim_index += 1
+
     def update_monster_explosion_reacts(self):
         """ For updating monster explosion animation. """
         if self.monster_explosion_anim_counter == self.monster_explosion_anim_duration:
@@ -378,7 +482,8 @@ class SpaceInvadersApp:
                 self.monster_explosion_anim_index = 0
                 # Remove last explosion
             for explosion in range(len(self.monster_explosion_reacts)):
-                current_x, current_y = self.monster_explosion_reacts[explosion].centerx, self.monster_explosion_reacts[explosion].centery
+                current_x, current_y = self.monster_explosion_reacts[explosion].centerx, self.monster_explosion_reacts[
+                    explosion].centery
                 self.monster_explosion_surf = self.monster_explosion_surfs[self.monster_explosion_anim_index]
                 self.monster_explosion_reacts[explosion] = self.monster_explosion_surf.get_rect()
                 self.monster_explosion_reacts[explosion].centerx = current_x
@@ -388,8 +493,8 @@ class SpaceInvadersApp:
     def monster_explosion_handling(self):
         remove_explosion_indices = []
         for remove_count in range(len(self.monster_explosion_remove_counters)):
-            self.monster_explosion_remove_counters[remove_count] -= 1
-            if self.monster_explosion_remove_counters[remove_count] == 0:
+            self.monster_explosion_remove_counters[remove_count] += 1
+            if self.monster_explosion_remove_counters[remove_count] == self.monster_explosion_anim_duration:
                 remove_explosion_indices.append(remove_count)
         updated_explosion_reacts = []
         updated_remove_counters = []
@@ -424,6 +529,9 @@ class SpaceInvadersApp:
         # Rendering life symbols
         for life in range(len(self._life_reacts)):
             self._display_surf.blit(self._life_surf, self._life_reacts[life])
+        # Rendering ufp
+        for ufo in range(len(self.ufo_reacts)):
+            self._display_surf.blit(self.ufo_surf, self.ufo_reacts[ufo])
         # Rendering score text
         self._display_surf.blit(self.score_text_surface, self.score_text_react)
         self._display_surf.blit(self.score_text_value_surface, self.score_text_value_react)
@@ -459,6 +567,11 @@ class SpaceInvadersApp:
                     self.move_monsters_right()
 
             self.generate_monsters_shots()
+            self.generate_ufo()
+
+            self.update_ufo_position()
+            self.update_ufo_reacts()
+            self.update_ufo_anim_reacts()
 
             self.update_ship_position()
             self.update_ship_react()
@@ -471,6 +584,7 @@ class SpaceInvadersApp:
 
             self.shot_2_ship_collision_detect()
             self.shot_2_monster_collision_detect()
+            self.shot_2_ufo_collision_detect()
 
             self.update_monster_reacts()
 
@@ -487,6 +601,7 @@ class SpaceInvadersApp:
             self.life_anim_counter += 1
             self.monster_anim_counter += 1
             self.monster_explosion_anim_counter += 1
+            self.ufo_anim_counter += 1
         self.on_cleanup()
 
 
