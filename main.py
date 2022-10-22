@@ -7,15 +7,14 @@ from copy import deepcopy
 class SpaceInvadersApp:
     def __init__(self):
         self._running = True
-
         self._display_surf = None
         self._background_surf = None
         self.screen_size = self.screen_width, self.screen_height = 1353, 709
 
+        self.x_velocity = 6
         self._ship_surf = None
         self._ship_react = None
         self.ship_size = self.ship_width, self.ship_height = 80, 80
-        self.x_velocity = 6
         self.ship_surfs = None
         self.ship_reacts = None
         # For handling the update procedure of the spaceship sprites
@@ -60,12 +59,12 @@ class SpaceInvadersApp:
         self.score_text_react = None
 
         self.nr_lives = 3
+        self.life_width = 35
         self.life_surfs = None
         self.life_surf = None
-        self.life_react = None
-        self.life_width = 35
-        self.life_reacts = []  # For 3 lives
-        self.life_surfs_actual = []
+        self._life_react = None
+        self._life_reacts = []  # For 3 lives
+        self._life_surf = None
         # For handling the update procedure of the spaceship sprites
         self.life_anim_duration = 10  # Each sprite lasts 10 frames in main loop
         self.life_anim_index = 0
@@ -77,12 +76,14 @@ class SpaceInvadersApp:
         self.current_lifes = 3
 
     def on_init(self):
+        # Initializing pygame and loading in graphics for background
         pygame.init()
         self._display_surf = pygame.display.set_mode(size=self.screen_size,
                                                      flags=(pygame.HWSURFACE or pygame.DOUBLEBUF))
         self._running = True
         self._background_surf = pygame.image.load("media/background.png").convert()
 
+        # Loading in graphics for ship
         self.ship_surfs = [pygame.image.load("media/spaceship/frame_0.png").convert_alpha(),
                            pygame.image.load("media/spaceship/frame_1.png").convert_alpha()]
 
@@ -93,7 +94,11 @@ class SpaceInvadersApp:
         self._ship_react.centerx = int(self.screen_width / 2)
         self._ship_react.centery = self.screen_height - self.ship_width - self.buffer
 
-        # For life indicator
+        # Loading in graphics for shots fired by ship
+        self._ship_shot_surf = pygame.image.load("media/shots/shot1.png")
+        self._ship_shot_react = self._ship_shot_surf.get_rect()
+
+        # Loading in graphics for life indicators
         self.life_surfs = [pygame.image.load("media/life/frame_0.png").convert_alpha(),
                            pygame.image.load("media/life/frame_1.png").convert_alpha(),
                            pygame.image.load("media/life/frame_2.png").convert_alpha(),
@@ -102,28 +107,20 @@ class SpaceInvadersApp:
                            pygame.image.load("media/life/frame_5.png").convert_alpha(),
                            pygame.image.load("media/life/frame_6.png").convert_alpha(),
                            pygame.image.load("media/life/frame_7.png").convert_alpha()]
-        self.life_surf = self.life_surfs[0]
-        self.life_react = self.life_surf.get_rect()
-        for life in range(self.nr_lives):
-            x = 1252 + life*self.life_width
-            y = 22
-            react = self.life_surf.get_rect()
-            react.centerx = x
-            react.centery = y
-            self.life_reacts.append(react)
-            self.life_surfs_actual.append(self.life_surfs[0])
+        self._life_surf = self.life_surfs[0]
+        self._life_react = self._life_surf.get_rect()
 
-        self._ship_shot_surf = pygame.image.load("media/shots/shot1.png")
-        self._ship_shot_react = self._ship_shot_surf.get_rect()
-
+        # Loading in graphics for monsters
         self.monster_surfs = [pygame.image.load("media/enemy/frame_0.png").convert_alpha(),
                               pygame.image.load("media/enemy/frame_1.png").convert_alpha()]
         self._monster_surf = self.monster_surfs[0]
         self._monster_react = self._monster_surf.get_rect()
 
+        # Loading in graphics for shots fired by monsters
         self.monster_shot_surf = pygame.image.load("media/shots/shot2.png")
         self.monster_shot_react = self.monster_shot_surf.get_rect()
 
+        # Text graphics
         self.score_text_react = self.score_text_surface.get_rect()
         self.score_text_react.centerx = 50
         self.score_text_react.centery = 25
@@ -141,6 +138,7 @@ class SpaceInvadersApp:
                 self.spawn_ship_shot()
 
     def update_ship_position(self):
+        """ For updating position (left and right) of ship when pressing L/R or A/D"""
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             if self._ship_react.x > 0 + self.buffer:
@@ -150,12 +148,13 @@ class SpaceInvadersApp:
                 self._ship_react = self._ship_react.move(self.x_velocity, 0)
 
     def spawn_ship_shot(self):
-        # Spawning shot on top of ship
+        """ For spawning shots in, when fired from ship"""
         self._ship_shot_react.centerx = self._ship_react.centerx
         self._ship_shot_react.centery = self._ship_react.centery - self.ship_height / 2 - self.ship_shot_height / 2 - self.shot_buffer
         self._ship_shot_reacts.append(self._ship_shot_react)
 
     def spawn_monsters(self):
+        """ For spawning in monsters in beginning of game """
         for row in range(self.nr_monsters[0]):
             for col in range(self.nr_monsters[1]):
                 current_rect = deepcopy(self._monster_react)
@@ -165,19 +164,35 @@ class SpaceInvadersApp:
                 current_rect.centery = self.monster_height / 2 + 40 + y_distance
                 self._monster_reacts.append(current_rect)
 
+    def spawn_lives(self):
+        """ For spawning in lives in beginning of game """
+        for life in range(self.nr_lives):
+            current_rect = deepcopy(self._life_react)
+            current_rect.centerx, current_rect.centery = 1252 + life * self.life_width, 22
+            self._life_reacts.append(current_rect)
+
+    def spawn_monster_shot(self, monster_index):
+        """ For spawning shots in, when fired from ship"""
+        shot_react = deepcopy(self.monster_shot_react)
+        shot_react.centerx = self._monster_reacts[monster_index].centerx
+        shot_react.centery = self._monster_reacts[monster_index].centery + self.monster_height / 2 + self.shot_buffer
+        self.monster_shot_reacts.append(shot_react)
+
     def move_monsters_right(self):
-        # Moving monsters right
+        """ For moving monsters right """
         if self.monster_right_edge_reached is False:
             for i in range(len(self._monster_reacts)):
                 self._monster_reacts[i] = self._monster_reacts[i].move(self.monster_x_vel, 0)
 
     def move_monsters_left(self):
-        # Moving monsters left
+        """ For moving monsters left """
         if self.monster_left_edge_reached is False:
             for i in range(len(self._monster_reacts)):
                 self._monster_reacts[i] = self._monster_reacts[i].move(-self.monster_x_vel, 0)
 
     def update_monster_positions_flag(self):
+        """ For updating flags when monsters reaches left/right side of screen"""
+
         # Checking of monster has reached right edge
         if self.monster_right_edge_reached is False:
             for i in range(len(self._monster_reacts)):
@@ -193,6 +208,9 @@ class SpaceInvadersApp:
                     self.monster_right_edge_reached = False
 
     def shot_2_monster_collision_detect(self):
+        """ For detecting collisions between shots fired from ships, and monsters
+            which also updates list of monster rects and list of shot rects,
+            when collision detected. (N.B. Also updates current score.)"""
         remove_shot_indices = []
         remove_monster_indices = []
         for monster in range(len(self._monster_reacts)):
@@ -201,6 +219,7 @@ class SpaceInvadersApp:
                     remove_shot_indices.append(ship_shot)
                     remove_monster_indices.append(monster)
 
+        # Updating score
         for kill in range(len(remove_monster_indices)):
             self.current_score += 10
 
@@ -217,12 +236,16 @@ class SpaceInvadersApp:
         self._ship_shot_reacts = updated_ship_shot_rects
 
     def shot_2_ship_collision_detect(self):
+        """ For detecting collisions between shots fired from enemies, and ship
+            which also updates list of shot rects and list of life rects
+            when collision detected. (N.B. Also updates current life score.)"""
         remove_shot_indices = []
         for monster_shot in range(len(self.monster_shot_reacts)):
             if pygame.Rect.colliderect(self._ship_react, self.monster_shot_reacts[monster_shot]):
                 remove_shot_indices.append(monster_shot)
-                # remove last life in life reacts
-                self.life_reacts = self.life_reacts[:len(self.life_reacts) - 1]
+                # Remove last life in life reacts
+                self._life_reacts = self._life_reacts[:len(self._life_reacts) - 1]
+                # Update score
                 self.current_lifes -= 1
 
         updated_monster_shot_rects = []
@@ -233,45 +256,39 @@ class SpaceInvadersApp:
         self.monster_shot_reacts = updated_monster_shot_rects
 
     def generate_monsters_shots(self):
-        shoot = 1
+        """ For generating shots from monsters randomly. """
         shot_probability = 0.0003  # Number in [0;1]
         if len(self._monster_reacts):
             for monster in range(len(self._monster_reacts)):
                 shooting_flag = np.random.binomial(n=1, p=shot_probability, size=1)[0]  # Returns 1 w. prob. 'p'
-                if shooting_flag == shoot:
+                if shooting_flag == 1:
                     self.spawn_monster_shot(monster_index=monster)
 
-    def spawn_monster_shot(self, monster_index):
-        # Creating instance
-        shot_react = deepcopy(self.monster_shot_react)
-        shot_react.centerx = self._monster_reacts[monster_index].centerx
-        shot_react.centery = self._monster_reacts[monster_index].centery + self.monster_height / 2 + self.shot_buffer
-        # Saving instance
-        self.monster_shot_reacts.append(shot_react)
-
     def update_ship_shots_position(self):
-        # Update y position of shots fired from ship
+        """ For updating positions of shots fired from ship."""
         if len(self._ship_shot_reacts) > 0:
             for i in range(len(self._ship_shot_reacts)):
                 self._ship_shot_reacts[i] = self._ship_shot_reacts[i].move(0, -self.shot_y_velocity)
 
     def update_monster_shots_position(self):
-        # Update y position of shots fired from ship
+        """ For updating positions of shots fired from monsters. """
         if len(self.monster_shot_reacts) > 0:
             for i in range(len(self.monster_shot_reacts)):
                 self.monster_shot_reacts[i] = self.monster_shot_reacts[i].move(0, self.shot_y_velocity)
 
     def update_ship_shot_reacts(self):
-        # Removing shot reacts that are out of frame
+        """ For removing shots fired from ship that are out of screen. """
         if len(self._ship_shot_reacts) > 0:
             self._ship_shot_reacts = [r for r in self._ship_shot_reacts if r.centery >= self.ship_shot_height / 2]
 
     def update_monster_shot_reacts(self):
-        # Removing shots that are out of frame
+        """ For removing shots fired from monsters that are out of screen. """
         if len(self.monster_shot_reacts) > 0:
-            self.monster_shot_reacts = [r for r in self.monster_shot_reacts if r.centery <= self.screen_height - self.ship_shot_height / 2]
+            self.monster_shot_reacts = [r for r in self.monster_shot_reacts if
+                                        r.centery <= self.screen_height - self.ship_shot_height / 2]
 
     def update_score(self):
+        """ For updating score value text. """
         self.score_text_value_surface = self.score_board_font.render(" " + str(self.current_score), True,
                                                                      self.text_color, None)
         self.score_text_value_react = self.score_text_value_surface.get_rect()
@@ -279,6 +296,7 @@ class SpaceInvadersApp:
         self.score_text_value_react.centery = 25
 
     def update_ship_react(self):
+        """ For updating ship rect animation. """
         if self.ship_anim_counter == self.ship_anim_duration:
             self.ship_anim_counter = 0
             if self.ship_anim_index == len(self.ship_surfs):
@@ -291,19 +309,21 @@ class SpaceInvadersApp:
             self.ship_anim_index += 1
 
     def update_life_reacts(self):
+        """ For updating life animation. """
         if self.life_anim_counter == self.life_anim_duration:
             self.life_anim_counter = 0
             if self.life_anim_index == len(self.life_surfs):
                 self.life_anim_index = 0
-            for life in range(len(self.life_reacts)):
-                current_x, current_y = self.life_reacts[life].centerx, self.life_reacts[life].centery
-                self.life_surfs_actual[life] = self.life_surfs[self.life_anim_index]
-                self.life_reacts[life] = self.life_surf.get_rect()
-                self.life_reacts[life].centerx = current_x
-                self.life_reacts[life].centery = current_y
+            for life in range(len(self._life_reacts)):
+                current_x, current_y = self._life_reacts[life].centerx, self._life_reacts[life].centery
+                self._life_surf = self.life_surfs[self.life_anim_index]
+                self._life_reacts[life] = self._life_surf.get_rect()
+                self._life_reacts[life].centerx = current_x
+                self._life_reacts[life].centery = current_y
             self.life_anim_index += 1
 
     def update_monster_reacts(self):
+        """ For updating monster animation. """
         if self.monster_anim_counter == self.monster_anim_duration:
             self.monster_anim_counter = 0
             if self.monster_anim_index == len(self.monster_surfs):
@@ -334,8 +354,8 @@ class SpaceInvadersApp:
         for monster_shot_react in self.monster_shot_reacts:
             self._display_surf.blit(self.monster_shot_surf, monster_shot_react)
         # Rendering life symbols
-        for life in range(len(self.life_reacts)):
-            self._display_surf.blit(self.life_surfs_actual[life], self.life_reacts[life])
+        for life in range(len(self._life_reacts)):
+            self._display_surf.blit(self._life_surf, self._life_reacts[life])
         # Rendering score text
         self._display_surf.blit(self.score_text_surface, self.score_text_react)
         self._display_surf.blit(self.score_text_value_surface, self.score_text_value_react)
@@ -352,6 +372,7 @@ class SpaceInvadersApp:
             self._running = False
 
         self.spawn_monsters()
+        self.spawn_lives()
         while self._running:
             pygame.time.delay(10)  # Is this needed ?
             for event in pygame.event.get():
