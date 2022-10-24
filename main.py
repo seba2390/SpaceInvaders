@@ -34,7 +34,7 @@ class SpaceInvadersApp:
         self.ship_shot_size = self.ship_shot_width, self.ship_shot_height = 10, 35
         self.shot_y_velocity = 4
 
-        self._nr_monsters = (5, 12)
+        self._nr_monsters = (3, 10)
         self._monster_surf = None
         self._monster_react = None
         self._monster_reacts = []
@@ -120,6 +120,22 @@ class SpaceInvadersApp:
         self.restart_text_react.centerx = int(self.screen_width/2) + 3
         self.restart_text_react.centery = int(self.screen_height/2) + int(1.85*self.restart_button_height)
 
+        self._loading_display_surf = None
+        self._loading_background_surf = None
+        self.loading_font = pygame.font.Font("media/Space-Invaders-Font/space_invaders.ttf", 40)
+        self.loading_text_surfaces = [
+                                      self.loading_font.render("Loading next level .  ", True, self.text_color, None),
+                                      self.loading_font.render("Loading next level .. ", True, self.text_color, None),
+                                      self.loading_font.render("Loading next level ...", True, self.text_color, None),
+                                      self.loading_font.render("Loading next level    ", True, self.text_color, None)]
+        self.loading_text_react = self.loading_text_surfaces[0].get_rect()
+        self.loading_text_react.centerx = int(self.screen_width/2) + 3
+        self.loading_text_react.centery = int(self.screen_height/2)
+        self.loading_text_anim_duration = 30
+        self.loading_text_anim_counter = 0
+        self.loading_text_frame_counter = 0
+        self.loading_anim_completions = 0
+
         self.nr_lives = 3
         self.life_width = 35
         self.life_surfs = None
@@ -141,6 +157,8 @@ class SpaceInvadersApp:
         self.current_score = 0
         self.current_lifes = 3
 
+        self.in_game = True
+
     def on_init(self):
         # Initializing pygame and loading in graphics for background
         pygame.init()
@@ -152,6 +170,10 @@ class SpaceInvadersApp:
         self._game_over_display_surf = pygame.display.set_mode(size=self.screen_size,
                                                                flags=(pygame.HWSURFACE or pygame.DOUBLEBUF))
         self._game_over_background_surf = pygame.image.load("media/background.png").convert()
+
+        self._loading_display_surf = pygame.display.set_mode(size=self.screen_size,
+                                                               flags=(pygame.HWSURFACE or pygame.DOUBLEBUF))
+        self._loading_background_surf = pygame.image.load("media/background.png").convert()
 
         # Loading in graphics for ship
         self.ship_surfs = [pygame.image.load("media/spaceship/frame_0.png").convert_alpha(),
@@ -408,7 +430,7 @@ class SpaceInvadersApp:
 
     def generate_monsters_shots(self):
         """ For generating shots from monsters randomly. """
-        shot_probability = 0.0003  # Number in [0;1]
+        shot_probability = 0.0003 * self.current_level  # Number in [0;1]
         if len(self._monster_reacts):
             for monster in range(len(self._monster_reacts)):
                 shooting_flag = np.random.binomial(n=1, p=shot_probability, size=1)[0]  # Returns 1 w. prob. 'p'
@@ -610,6 +632,13 @@ class SpaceInvadersApp:
         self._game_over_display_surf.blit(self.restart_text_surface, self.restart_text_react)
         pygame.display.flip()
 
+    def loading_render(self):
+        # Rendering background
+        self._loading_display_surf.blit(self._loading_background_surf, (0, 0))
+        self._loading_display_surf.blit(self.loading_text_surfaces[self.loading_text_frame_counter],
+                                        self.loading_text_react)
+        pygame.display.flip()
+
     def update_game_over_react(self):
         """ Animating game over text """
         if self.game_over_anim_counter == self.game_over_anim_duration:
@@ -620,6 +649,20 @@ class SpaceInvadersApp:
             else:
                 self.game_over_text_react.centery -= 5
                 self.game_over_position = 'down'
+
+    def update_loading_react(self):
+        """ Animating game over text """
+        if self.loading_text_frame_counter == len(self.loading_text_surfaces)-1:
+            self.loading_text_frame_counter = 0
+            self.loading_anim_completions += 1
+
+        if self.loading_text_anim_counter == self.loading_text_anim_duration:
+            self.loading_text_anim_counter = 0
+            self.loading_text_frame_counter += 1
+            current_x, current_y = self.loading_text_react.centerx, self.loading_text_react.centery
+            self.loading_text_react = self.loading_text_surfaces[self.loading_text_frame_counter].get_rect()
+            self.loading_text_react.centerx = current_x
+            self.loading_text_react.centery = current_y
 
     def game_over_reset(self):
         self.current_lifes = 3
@@ -634,6 +677,19 @@ class SpaceInvadersApp:
         self._ship_shot_reacts = []
         self.spawn_monsters()
         self.spawn_lives()
+
+    def new_level_reset(self):
+        self.current_level += 1
+
+        self.loading_anim_completions = 0
+        self.loading_text_anim_counter = 0
+        self.loading_text_frame_counter = 0
+        self._monster_reacts = []
+        self.ufo_reacts = []
+        self.monster_explosion_reacts = []
+        self.monster_shot_reacts = []
+        self._ship_shot_reacts = []
+        self.spawn_monsters()
 
     @staticmethod
     def on_cleanup():
@@ -651,52 +707,60 @@ class SpaceInvadersApp:
                 self.on_event(event)
 
             if self.current_lifes > 0:
-                # Initially moving monsters right
-                if not self.monster_right_edge_reached and not self.monster_left_edge_reached:
-                    self.move_monsters_right()
-                    self.update_monster_positions_flag()
-                # Shuffling between left and right
-                else:
-                    self.update_monster_positions_flag()
-                    if self.monster_right_edge_reached:
-                        self.move_monsters_left()
-                    if self.monster_left_edge_reached:
+
+                if len(self._monster_reacts) > 0:
+                    # Initially moving monsters right
+                    if not self.monster_right_edge_reached and not self.monster_left_edge_reached:
                         self.move_monsters_right()
+                        self.update_monster_positions_flag()
+                    # Shuffling between left and right
+                    else:
+                        self.update_monster_positions_flag()
+                        if self.monster_right_edge_reached:
+                            self.move_monsters_left()
+                        if self.monster_left_edge_reached:
+                            self.move_monsters_right()
 
-                self.generate_monsters_shots()
-                self.generate_ufo()
+                    self.generate_monsters_shots()
+                    self.generate_ufo()
 
-                self.update_ufo_position()
-                self.update_ufo_reacts()
-                self.update_ufo_anim_reacts()
+                    self.update_ufo_position()
+                    self.update_ufo_reacts()
+                    self.update_ufo_anim_reacts()
 
-                self.update_ship_position()
-                self.update_ship_react()
+                    self.update_ship_position()
+                    self.update_ship_react()
 
-                self.update_ship_shots_position()
-                self.update_ship_shot_reacts()
+                    self.update_ship_shots_position()
+                    self.update_ship_shot_reacts()
 
-                self.update_monster_shots_position()
-                self.update_monster_shot_reacts()
+                    self.update_monster_shots_position()
+                    self.update_monster_shot_reacts()
 
-                self.shot_2_ship_collision_detect()
-                self.shot_2_monster_collision_detect()
-                self.shot_2_ufo_collision_detect()
+                    self.shot_2_ship_collision_detect()
+                    self.shot_2_monster_collision_detect()
+                    self.shot_2_ufo_collision_detect()
 
-                self.update_monster_reacts()
+                    self.update_monster_reacts()
 
-                self.update_monster_explosion_reacts()
+                    self.update_monster_explosion_reacts()
 
-                self.update_life_reacts()
-                self.update_score()
-                self.update_level()
+                    self.update_life_reacts()
+                    self.update_score()
+                    self.update_level()
 
-                self.in_game_render()
+                    self.in_game_render()
 
-                self.ship_anim_counter += 1
-                self.life_anim_counter += 1
-                self.monster_anim_counter += 1
-                self.ufo_anim_counter += 1
+                    self.ship_anim_counter += 1
+                    self.life_anim_counter += 1
+                    self.monster_anim_counter += 1
+                    self.ufo_anim_counter += 1
+                else:
+                    self.update_loading_react()
+                    self.loading_render()
+                    self.loading_text_anim_counter += 1
+                    if self.loading_anim_completions == 2:
+                        self.new_level_reset()
             else:
                 mouse_position = pygame.mouse.get_pos()
                 if self.restart_button_dims[0] <= mouse_position[0] <= self.restart_button_dims[0] + self.restart_button_width \
