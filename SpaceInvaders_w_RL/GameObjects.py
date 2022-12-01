@@ -13,7 +13,6 @@ class Ufo:
         self.surf = None
         self.rect = None
         self.rects = []
-        self.surfss = None
         self.direction_flag = None
         self.x_vel = 2
         self.display_gameplay = display_gameplay
@@ -134,7 +133,7 @@ class SpaceShip:
         self.height = height
         self.width = width
         self.rect = None
-        self.x_velocity = 6
+        self.x_velocity = 12
 
         self.anim_counter = 0
         self.anim_duration = 10
@@ -211,7 +210,7 @@ class Monsters:
         self.monster_buffer = 5
         self.edge_distance = 350
 
-        self.x_velocity = 1
+        self.x_velocity = 10
         self.right_edge_reached, self.left_edge_reached = False, False
 
         self.display_gameplay = display_gameplay

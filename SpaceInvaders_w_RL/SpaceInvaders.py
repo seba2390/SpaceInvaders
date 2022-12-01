@@ -9,16 +9,17 @@ import time
 
 
 class SpaceInvadersApp:
-    def __init__(self, display_gameplay, seed):
+    def __init__(self, display_gameplay, seed, neural_net=None):
         np.random.seed(seed)
-        self.maxIter = 600
+
+        self.maxIter = 1500
         self.maxCounter = 0
         self.monsters_killed = 0
         self.ufos_killed = 0
         self.display_gameplay = display_gameplay
         self.is_training = not self.display_gameplay
 
-        self.neural_net = None
+        self.neural_net = neural_net
         self._running = True
         self._resolution = 50
         self.screen_size = self.screen_width, self.screen_height = 1353, 709
@@ -28,7 +29,7 @@ class SpaceInvadersApp:
         self.monster_buffer = 5
 
         self.is_dead = False
-        self.death_punishment = -1
+        self.death_punishment = -10
         self.hit_punishment = -0.33
         self.killed_enemy_reward = 1
         self.killed_ufo_reward = 1
@@ -93,11 +94,15 @@ class SpaceInvadersApp:
 
     def get_state(self) -> torch.Tensor:
         col_width = int(self.screen_width / self._resolution)
-        ship_pos = self.ship.rect.left / (self.screen_width - self.ship.width)
-        state0 = [ship_pos]
+
+        state0 = [0 for i in range(self._resolution)]
+        for i in range(0, self._resolution):
+            for monster in self.monsters.monsters:
+                if i * col_width <= self.ship.rect.centerx <= (i + 1) * col_width:
+                    state0[i] = 1
+
         num_monster_rows = 3
         num_current_shots = len(self.monsters.shots.shots)
-
         state1 = [0 for i in range(self._resolution)]
         for i in range(0, self._resolution):
             for monster in self.monsters.monsters:
@@ -118,10 +123,11 @@ class SpaceInvadersApp:
             if event.type == pygame.QUIT:
                 self._running = False
 
-        if event.type == KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                self.ship.shots.spawn_ship_shot(centerx=self.ship.rect.centerx,
-                                                centery=self.ship.rect.centery,ship_height=self.ship.height)
+        if self.neural_net is None:
+            if event.type == KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    self.ship.shots.spawn_ship_shot(centerx=self.ship.rect.centerx,
+                                                    centery=self.ship.rect.centery,ship_height=self.ship.height)
 
     def update_ship_position(self, action=None):
         """ For updating position (left and right) of ship when pressing L/R or A/D"""
@@ -318,7 +324,13 @@ class SpaceInvadersApp:
                     self.ufo.update_ufo_rects()
                     self.pygame_gfx.update_ufo_anim_rects(self.ufo)
 
-                    self.update_ship_position()
+                    if self.neural_net is None:
+                        self.update_ship_position()
+                    else:
+                        current_state = self.get_state()
+                        actions = self.neural_net.forward(current_state)
+                        best_action = torch.argmax(actions).item()
+                        self.update_ship_position(action=best_action)
                     self.ship.update_ship_rect()
 
                     self.ship.update_ship_shots_position()

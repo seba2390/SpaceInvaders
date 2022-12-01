@@ -70,6 +70,38 @@ class Agent:
         # self.loss_func = torch.nn.HuberLoss(delta=1.0)  # Smooth L1 for delta = 1.0
         self.device = self.policy_network.device
 
+    @staticmethod
+    def stretched_exponential(_episode, nr_episodes, eps_0, eps_min,
+                              A=0.5, B=0.1, C=0.1):
+        """https://medium.com/analytics-vidhya/stretched-exponential-decay-function-for-epsilon-greedy-algorithm-98da6224c22f"""
+        standardized_time = (_episode - A * nr_episodes) / (B * nr_episodes)
+        cosh = np.cosh(np.exp(-standardized_time))
+        epsilon = eps_min + (eps_0 - eps_min) * (1.0 - (1.0 / cosh + (_episode * C / nr_episodes)))
+        if epsilon > eps_min:
+            return epsilon
+        else:
+            return eps_min
+
+    @staticmethod
+    def stretched_exponential_view(_episode, nr_episodes, eps_0, eps_min,
+                                   A=0.5, B=0.1, C=0.1):
+        """https://medium.com/analytics-vidhya/stretched-exponential-decay-function-for-epsilon-greedy-algorithm-98da6224c22f"""
+        standardized_time = (_episode - A * nr_episodes) / (B * nr_episodes)
+        cosh = np.cosh(np.exp(-standardized_time))
+        epsilon = eps_min + (eps_0 - eps_min) * (1.0 - (1.0 / cosh + (_episode * C / nr_episodes)))
+        return epsilon
+
+    @staticmethod
+    def linear(_episode, current_rate, eps_0, eps_min, decay_rate):
+        if current_rate > eps_min:
+            return eps_0 - decay_rate * _episode
+        else:
+            return eps_min
+
+    @staticmethod
+    def linear_view(_episode, eps_0, decay_rate):
+        return eps_0 - decay_rate * _episode
+
     def linear_decay(self, episode):
         if self.exploration_rate > self.exploration_rate_min:
             return self.exploration_rate_init - self.exploration_decay_rate * episode
