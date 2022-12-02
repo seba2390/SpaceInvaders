@@ -12,7 +12,7 @@ class SpaceInvadersApp:
     def __init__(self, display_gameplay, seed, neural_net=None):
         np.random.seed(seed)
 
-        self.maxIter = 1500
+        self.maxIter = 1000
         self.maxCounter = 0
         self.monsters_killed = 0
         self.ufos_killed = 0
@@ -21,8 +21,9 @@ class SpaceInvadersApp:
 
         self.neural_net = neural_net
         self._running = True
-        self._resolution = 50
         self.screen_size = self.screen_width, self.screen_height = 1353, 709
+        self.do_nothing_max = 30
+        self.do_nothing_max_counter = 0
 
         self.buffer = 20
         self.shot_buffer = 5
@@ -30,8 +31,8 @@ class SpaceInvadersApp:
 
         self.is_dead = False
         self.death_punishment = -10
-        self.hit_punishment = -0.33
-        self.killed_enemy_reward = 1
+        self.hit_punishment = -5
+        self.killed_enemy_reward = 1.0
         self.killed_ufo_reward = 1
 
         self.nr_lives = 3
@@ -64,59 +65,96 @@ class SpaceInvadersApp:
             self.pygame_gfx = PygameGraphics(screen_width=self.screen_width, screen_height=self.screen_height)
 
     def _set_action(self, action: int) -> None:
-        int_2_action = {0: "left", 1: "right", 2: "leftShoot", 3: "rightShoot", 4: "shoot", 5: "DoNothing"}
+        int_2_action = {0: "left", 1: "right", 2: "leftShoot", 4: "rightShoot", 3: "shoot", 5: "DoNothing"}
         action = int_2_action[action]
         assert self.ship.rect.left >= 0, "before"
         assert self.ship.rect.right <= self.screen_width, "before"
         if action == "left" and self.ship.rect.left >= 0 + 1.2 * self.ship.x_velocity:
             self.ship.rect = self.ship.rect.move(-self.ship.x_velocity, 0)
+            self.do_nothing_max_counter = 0
         if action == "right" and self.ship.rect.right <= self.screen_width - 1.2 * self.ship.x_velocity:
             self.ship.rect = self.ship.rect.move(self.ship.x_velocity, 0)
+            self.do_nothing_max_counter = 0
         if action == "leftShoot" and self.ship.rect.left >= 0 + 1.2 * self.ship.x_velocity:
             self.ship.rect = self.ship.rect.move(-self.ship.x_velocity, 0)
             self.ship.shots.spawn_ship_shot(centerx=self.ship.rect.centerx,
                                             centery=self.ship.rect.centery,
                                             ship_height=self.ship.height)
+            self.do_nothing_max_counter = 0
         if action == "shoot":
             self.ship.shots.spawn_ship_shot(centerx=self.ship.rect.centerx,
                                             centery=self.ship.rect.centery,
                                             ship_height=self.ship.height)
+            self.do_nothing_max_counter = 0
         if action == "rightShoot" and self.ship.rect.right <= self.screen_width - 1.2 * self.ship.x_velocity:
             self.ship.rect = self.ship.rect.move(self.ship.x_velocity, 0)
             self.ship.shots.spawn_ship_shot(centerx=self.ship.rect.centerx,
                                             centery=self.ship.rect.centery,
                                             ship_height=self.ship.height)
+            self.do_nothing_max_counter = 0
         if action == "DoNothing":
+            self.do_nothing_max_counter += 1
             pass
 
         assert self.ship.rect.left >= 0, "after"
         assert self.ship.rect.right <= self.screen_width, "after"
 
     def get_state(self) -> torch.Tensor:
-        col_width = int(self.screen_width / self._resolution)
 
-        state0 = [0 for i in range(self._resolution)]
-        for i in range(0, self._resolution):
-            for monster in self.monsters.monsters:
-                if i * col_width <= self.ship.rect.centerx <= (i + 1) * col_width:
-                    state0[i] = 1
+        ship = self.ship.rect
+        NR_MONSTERS_PR_ROW = 10
 
-        num_monster_rows = 3
-        num_current_shots = len(self.monsters.shots.shots)
-        state1 = [0 for i in range(self._resolution)]
-        for i in range(0, self._resolution):
-            for monster in self.monsters.monsters:
-                if i * col_width <= monster.centerx <= (i + 1) * col_width:
-                    state1[i] += 1.0 / num_monster_rows
+        # Monsters above, Monsters to the right, Monsters to the left, x-distance to Monsters.
+        state1 = [0, 0, 0, 0]
+        monsters_x = [monster.centerx for monster in self.monsters.monsters]
+        min_x, max_x = self.screen_width, 0
+        for monster_x in monsters_x:
+            # Monster above
+            if np.abs(monster_x - ship.centerx) < self.ship.width/2:
+                state1[0] = 1
 
-        state2 = [0 for i in range(self._resolution)]
-        for i in range(0, self._resolution):
-            for shot in self.monsters.shots.shots:
-                if i * col_width <= shot.centerx <= (i + 1) * col_width:
-                    state2[i] += 1.0 / num_current_shots
+            # Limit monster x
+            if monster_x < min_x:
+                min_x = monster_x
+            if monster_x > max_x:
+                max_x = monster_x
 
-        state = torch.tensor(state0 + state1 + state2, dtype=torch.float32).reshape(1, -1)
-        return state
+        # Outside of monsters
+        if state1[0] == 0:
+            norm_c = self.screen_width - NR_MONSTERS_PR_ROW * self.monsters.width - self.monsters.width / 2 - self.ship.width / 2
+            # Monsters to the right
+            if min_x - self.monsters.width / 2 > ship.centerx + self.ship.width / 2:
+                #print("monsters right")
+                state1[1] = 1
+                val = (min_x - ship.centerx) / norm_c
+                assert val >= 0
+                state1[3] = 1 - (min_x - ship.centerx) / norm_c
+            # Monsters to the left
+            if max_x + self.monsters.width / 2 < ship.centerx - self.ship.width / 2:
+                #print("monsters left")
+                state1[2] = 1
+                val = (ship.centerx - max_x) / norm_c
+                assert val >= 0
+                state1[3] = 1 - (ship.centerx - max_x) / norm_c
+
+        # Danger above, danger left, danger right
+        state2 = [0, 0, 0]
+        for monster_shot in self.monsters.shots.shots:
+            # Danger above
+            if np.abs(monster_shot.centerx - ship.centerx) < (self.ship.width + self.monsters.shots.width) / 2:
+                if monster_shot.bottom < ship.top:
+                    state2[0] = 1
+            # Danger left
+            if np.abs(monster_shot.centery - ship.centery) < (self.ship.height + self.monsters.shots.height) / 2:
+                if monster_shot.right <= ship.left:
+                    if np.abs(monster_shot.centerx - ship.centerx) < (self.ship.height + self.monsters.shots.height) / 2 + self.ship.x_velocity:
+                        state2[1] = 1
+                # Danger right
+                if monster_shot.left >= ship.right:
+                    if np.abs(monster_shot.centerx - ship.centerx) < (self.ship.height + self.monsters.shots.height) / 2 + self.ship.x_velocity:
+                        state2[2] = 1
+
+        return torch.tensor(state1 + state2, dtype=torch.float32).reshape(1, -1)
 
     def on_event(self, event):
         if event is not None:
@@ -152,6 +190,7 @@ class SpaceInvadersApp:
             for ship_shot in range(len(self.ship.shots.shots)):
                 check_collision = pygame.Rect.colliderect if not self.is_training else monster_detect_collision
                 if check_collision(self.monsters.monsters[monster], self.ship.shots.shots[ship_shot]):
+                    self.maxCounter = 0
                     remove_shot_indices.append(ship_shot)
                     remove_monster_indices.append(monster)
                     break
@@ -413,13 +452,10 @@ class SpaceInvadersApp:
 
         self._set_action(action=action)
 
-        if len(self.ship.shots.shots) > 0:
-            pass
-        # print(self._ship_shot_rects[0].centery)
-
-        # print(f"Monster pos: {self._monster_rects[0].centerx}")
-        if self.maxCounter == self.maxIter:
+        if self.maxCounter == self.maxIter or self.do_nothing_max_counter == self.do_nothing_max:
+            self.current_reward += -0.1
             self._running = False
+
         if self.is_dead:
             self._running = False
             self.current_reward += self.death_punishment

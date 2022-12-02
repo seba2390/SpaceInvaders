@@ -104,7 +104,7 @@ class ShipShots:
         self.width = width
         self.display_gameplay = display_gameplay
 
-        self.y_velocity = 4
+        self.y_velocity = 10
         self.shot_buffer = 5
         self.rect = None
 
@@ -210,7 +210,7 @@ class Monsters:
         self.monster_buffer = 5
         self.edge_distance = 350
 
-        self.x_velocity = 10
+        self.x_velocity = 1
         self.right_edge_reached, self.left_edge_reached = False, False
 
         self.display_gameplay = display_gameplay
