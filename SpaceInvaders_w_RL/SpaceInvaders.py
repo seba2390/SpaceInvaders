@@ -10,9 +10,11 @@ import time
 
 class SpaceInvadersApp:
     def __init__(self, display_gameplay, seed, neural_net=None):
-        np.random.seed(seed)
 
-        self.maxIter = 1000
+        self.seed = seed
+        np.random.seed(self.seed)
+
+        self.maxIter = 1500
         self.maxCounter = 0
         self.monsters_killed = 0
         self.ufos_killed = 0
@@ -48,13 +50,13 @@ class SpaceInvadersApp:
         else:
             self.pygame_gfx = None
 
-        self.monsters = Monsters(height=45, width=45, screen_width=self.screen_width,
+        self.monsters = Monsters(height=45, width=45, screen_width=self.screen_width, seed=self.seed,
                                  screen_height=self.screen_height, display_gameplay=self.display_gameplay)
 
-        self.ship = SpaceShip(height=80, width=80, screen_width=self.screen_width,
+        self.ship = SpaceShip(height=80, width=80, screen_width=self.screen_width, seed=self.seed,
                               screen_height=self.screen_height, display_gameplay=self.display_gameplay)
 
-        self.ufo = Ufo(height=55,width=55,display_gameplay=self.display_gameplay,
+        self.ufo = Ufo(height=55,width=55,display_gameplay=self.display_gameplay,seed=self.seed,
                        screen_height=self.screen_height,screen_width=self.screen_width)
 
     def on_init(self):
