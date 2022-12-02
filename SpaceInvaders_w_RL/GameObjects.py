@@ -1,3 +1,5 @@
+import numpy as np
+
 from Util import *
 import pygame
 from copy import deepcopy
@@ -7,6 +9,7 @@ class Ufo:
     def __init__(self, height: int, width: int,
                  screen_width: int, screen_height: int, display_gameplay: bool):
 
+        np.random.seed(seed=0)
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.size = self.width, self.height = width, height
@@ -127,6 +130,7 @@ class SpaceShip:
     def __init__(self, height: int, width: int,
                  screen_width: int, screen_height: int, display_gameplay: bool) -> None:
 
+        np.random.seed(seed=0)
         self.buffer = 20
         self.screen_height = screen_height
         self.screen_width = screen_width
@@ -195,6 +199,7 @@ class Monsters:
     def __init__(self, height: int, width: int,
                  screen_width: int, screen_height: int, display_gameplay: bool) -> None:
 
+        np.random.seed(seed=0)
         self.nr_rows, self.nr_cols = 3, 10
         self.screen_height = screen_height
         self.screen_width = screen_width
